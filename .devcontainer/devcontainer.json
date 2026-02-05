@@ -1,6 +1,7 @@
 {
   "name": "Container Fundamentals Course",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
   
   "features": {
     "ghcr.io/devcontainers/features/docker-in-docker:2": {
