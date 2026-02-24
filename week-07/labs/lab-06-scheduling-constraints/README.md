@@ -198,7 +198,7 @@ kubectl describe pod -l app=prod-app | grep -A5 Events
 
 The event reason will be `Insufficient pods` / `Too many pods` — the scheduler filtered out `scheduling-worker` because it is full, and no other node carries the `environment=production` label.
 
-Operator mindset: `Pending` is a signal, not a failure. The scheduler is telling you what it cannot satisfy.
+Operator mindset: if a pod is `Pending`, treat it as scheduler feedback and read Events first; do not patch manifests until you see the failed predicate.
 
 ---
 
@@ -243,7 +243,7 @@ kubectl label nodes scheduling-worker environment=production
 kubectl get pods -l app=affinity-required -o wide -w
 ```
 
-Operator mindset: required affinity is a permanent Pending risk if node labels are not managed carefully. Use preferred affinity unless the constraint is genuinely non-negotiable.
+Operator mindset: if label lifecycle is not tightly managed, use preferred affinity; reserve required affinity for truly non-negotiable placement rules.
 
 ---
 
@@ -364,7 +364,7 @@ kubectl taint nodes scheduling-worker2 workload=gpu:NoSchedule-
 kubectl taint nodes scheduling-worker maintenance=true:NoExecute-
 ```
 
-Operator mindset: taints protect nodes from workloads that do not belong there — but they only work if you taint the node before the workload deploys, not after.
+Ordering rule: taints protect nodes from workloads that do not belong there, but they only prevent placement when applied before scheduling.
 
 ---
 
@@ -394,7 +394,7 @@ kubectl describe pod -l app=distributed-service | grep -A10 Events
 
 Look for "didn't match pod anti-affinity rules" in the events. This is the deadlock risk with hard anti-affinity — if you need more replicas than you have nodes, scaling is permanently blocked.
 
-Operator mindset: hard anti-affinity and replica count must be planned together. If `maxReplicas` can exceed node count, use `topologySpreadConstraints` instead.
+Capacity rule: plan hard anti-affinity with replica ceilings. If replicas can exceed eligible nodes, prefer topology spread to avoid deadlock.
 
 ---
 
@@ -431,7 +431,7 @@ kubectl get pods -l app=spread-demo
 
 Notice: `whenUnsatisfiable: DoNotSchedule` means any pod that cannot be placed without violating `maxSkew` stays `Pending` rather than landing somewhere that breaks the spread. This is preferable to silently concentrating pods — you want to know when your cluster needs more capacity.
 
-Operator mindset: topology spread with `DoNotSchedule` is a forcing function for capacity planning. If you see Pending pods, your cluster needs more nodes, not looser constraints.
+Capacity signal: topology spread with `DoNotSchedule` exposes real capacity limits. If pods are Pending, confirm intent, then add capacity or adjust SLOs deliberately.
 
 ---
 
@@ -458,20 +458,21 @@ spec:
     spec:
       # Hard: only run on compute nodes
       # Soft: prefer production-labelled compute nodes
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-          - matchExpressions:
-            - key: node-role
-              operator: In
-              values: ["compute"]
-        preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 100
-          preference:
-            matchExpressions:
-            - key: environment
-              operator: In
-              values: ["production"]
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role
+                operator: In
+                values: ["compute"]
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: environment
+                operator: In
+                values: ["production"]
       # Balance replicas evenly across compute nodes
       topologySpreadConstraints:
       - maxSkew: 1
@@ -507,7 +508,7 @@ kubectl get pods -l app=web-tier -o wide
 
 Notice: all pods land on `scheduling-worker` and `scheduling-worker2` (the compute nodes), and they are balanced across those two nodes. `scheduling-worker3` is excluded by the required affinity even though it has available capacity. This is the correct behavior — compute workloads should not spill onto storage nodes.
 
-Operator mindset: scheduling constraints are a contract between the platform team (who labels nodes) and the application team (who writes affinity rules). Both sides have to hold up their end.
+Operating model: scheduling constraints are a contract between platform labels and application affinity rules; both must stay aligned.
 
 ---
 
@@ -555,7 +556,7 @@ kubectl label nodes scheduling-worker impossible-label=does-not-exist
 kubectl get pod impossible-pod -o wide -w
 ```
 
-Operator mindset: always read the Events block before reaching for a fix. The scheduler tells you exactly what is wrong — you just have to read it.
+Operator mindset: if a pod is unschedulable, start with the Events block before changing labels, taints, or affinity; the scheduler already names the blocking rule.
 
 ---
 

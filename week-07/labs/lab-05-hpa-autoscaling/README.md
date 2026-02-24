@@ -183,7 +183,7 @@ kubectl top pods
 
 Notice: `kubectl top` is point-in-time — like running `htop` on a server. It tells you what is happening right now but retains no history. Prometheus gives you history and alerting. Both are useful; CKA tests `kubectl top`. Do not move on until `kubectl top nodes` returns data.
 
-Operator mindset: always verify the metrics pipeline before trusting HPA behavior.
+Operator mindset: if `kubectl top` has no data, do not debug HPA yet; restore metrics first, then evaluate scaling behavior.
 
 ---
 
@@ -223,7 +223,7 @@ kubectl rollout status deployment/student-app
 
 Notice: `100m` CPU request means "one tenth of a CPU core." If this pod consumes 80m actual CPU, that is 80% utilization from HPA's perspective — even though the node itself may be nearly idle. The percentage is always relative to the request, not the node.
 
-Operator mindset: resource requests are not just for the scheduler — they define the unit of measurement for autoscaling.
+Operator mindset: if HPA `TARGETS` is `<unknown>` or percentages look wrong, verify CPU requests first because they define autoscaling math.
 
 ---
 
@@ -240,7 +240,7 @@ Wait for the `TARGETS` column to show a real percentage rather than `<unknown>`.
 
 Notice: while `kubectl autoscale` is fast to type, the resulting object uses the older `autoscaling/v1` API. For production YAML you will want `autoscaling/v2`, which supports memory metrics and custom metric types. Know both for the exam.
 
-Operator mindset: imperative commands are useful for speed; understand what they create.
+Exam note: imperative commands are useful for speed; verify the generated API version and fields before carrying it into production manifests.
 
 ---
 
@@ -293,7 +293,7 @@ kubectl explain hpa.spec.behavior
 
 Notice: the `stabilizationWindowSeconds` is set to 60 here instead of the production default of 300 so you can actually observe scale-down in a lab session. In production, 300 seconds prevents thrashing during normal traffic variance.
 
-Operator mindset: read the API docs for the fields you are writing — `kubectl explain` is the exam-safe equivalent of the docs.
+Authoring note: read the API docs for the fields you are writing — `kubectl explain` is the exam-safe equivalent of external docs.
 
 ---
 
@@ -322,7 +322,7 @@ You should see CPU in the TARGETS column climb past 50%, then `REPLICAS` increme
 
 Notice: there is a lag between CPU rising and new pods serving traffic. The HPA sync interval is 15 seconds, pod startup takes additional time, and the new pods must pass readiness checks before the Service routes to them. This pipeline delay is why you should set your HPA targets conservatively rather than at 90% — you want headroom to absorb load while new pods spin up.
 
-Operator mindset: autoscaling is not instantaneous. Size your target threshold to account for pod startup time.
+Performance note: autoscaling is not instantaneous. Size your target threshold to account for HPA sync interval, startup, and readiness delay.
 
 ---
 
@@ -341,7 +341,7 @@ Look at the `Conditions` section in `describe` output. You will see a `ScalingAc
 
 Notice: HPA stabilization prevents a scenario where a brief traffic lull causes a scale-down that immediately reverses when the next request burst arrives — which would cause Kubernetes to thrash between replica counts. The cooldown trades a little wasted capacity for scheduling stability.
 
-Operator mindset: scale-down delay is a feature, not a bug — tune it to your traffic pattern.
+Tuning note: scale-down delay is a feature, not a bug — tune stabilization to your traffic pattern instead of optimizing for instant scale-in.
 
 ---
 
@@ -370,7 +370,7 @@ kubectl -n kube-system rollout status deployment/metrics-server
 kubectl top nodes
 ```
 
-Operator mindset: when HPA stops scaling, check the metrics pipeline before touching the Deployment directly.
+Operator mindset: if HPA stops scaling, check metrics availability before touching the Deployment, or you risk masking the real fault.
 
 ---
 
