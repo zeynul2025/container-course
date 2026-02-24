@@ -190,7 +190,13 @@ kubectl scale deployment prod-app --replicas=6
 kubectl get pods -o wide
 ```
 
-Notice: some pods will be `Pending`. They are not stuck because of a bug — they are stuck because the only eligible node (`scheduling-worker`) is resource-constrained and there are no other nodes that match the selector. This is exactly what `nodeSelector` is supposed to do. Check the events to confirm: `kubectl describe pod -l app=prod-app | grep -A5 Events`.
+Notice: some pods will be `Pending`. They are not stuck because of a bug — they are stuck because the only eligible node (`scheduling-worker`) is at capacity (the cluster config sets `max-pods: 6` on this node, and ~2 system pods are already running there) and there are no other nodes that match the selector. Check the events to confirm:
+
+```bash
+kubectl describe pod -l app=prod-app | grep -A5 Events
+```
+
+The event reason will be `Insufficient pods` / `Too many pods` — the scheduler filtered out `scheduling-worker` because it is full, and no other node carries the `environment=production` label.
 
 Operator mindset: `Pending` is a signal, not a failure. The scheduler is telling you what it cannot satisfy.
 
